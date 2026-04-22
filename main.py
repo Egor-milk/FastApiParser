@@ -1,3 +1,5 @@
+from typing import Any
+
 import requests
 from fake_useragent import UserAgent
 from bs4 import BeautifulSoup
@@ -5,48 +7,57 @@ from dataclasses import dataclass
 from pprint import pprint
 
 
-main_page = 'https://habr.com/'
-topic = 'ru/articles/top/daily/'
+
+class Habr:
+    main_page = 'https://habr.com/'
+    topic = 'https://habr.com/ru/articles/top/daily/'
+
+    @dataclass
+    class __ArticleData:
+        title: str
+        views: str
+        link: str
+        text: str
+
+    class Page(BeautifulSoup):
+        def __init__(self, url: str, **kwargs: Any):
+            super().__init__(**kwargs)
+            self.url = url
+
+        @property
+        def html(self) -> str:
+            res = requests.get(
+                self.url,
+                headers={
+                    'User-Agent': UserAgent().google
+                }
+            )
+            return res.text
+
+        @property
+        def soup(self) -> BeautifulSoup:
+            return BeautifulSoup(self.html, 'lxml')
 
 
-def get_url_html(url: str) -> str:
-    res = requests.get(
-        url,
-        headers={
-            'User-Agent': UserAgent().google
-        }
-    )
-    return res.text
+    @staticmethod
+    def get_best_posts() -> list[__ArticleData]:
+        posts_data = []
+        topic_page = Habr.Page(Habr.topic)
+        all_articles_soup = topic_page.soup.find_all('article', class_='tm-articles-list__item')
 
-def get_soup(html_text: str) -> BeautifulSoup:
-    return BeautifulSoup(html_text, 'lxml')
+        for article_soup in all_articles_soup:
+            article_title = article_soup.find('a', class_='tm-title__link').find('span').text
+            article_views = article_soup.find('span', class_='tm-icon-counter__value').text
+            article_link = str(article_soup.find('a', class_='tm-title__link')['href'])
 
-@dataclass
-class ArticleData:
-    title: str
-    views: str
-    link : str
-    text : str
+            article_page = Habr.Page(Habr.main_page + article_link)
+            article_text = article_page.soup.find('div', class_='article-body').text
 
-
-def get_all_text_from_posts(soup: BeautifulSoup):
-    article_text = soup.find('div', class_ = 'article-body').text
-    return article_text
-
-def get_best_habr_posts() -> list[ArticleData]:
-    posts_data = []
-    topic_soup = get_soup(get_url_html(main_page + topic))
-    all_articles_soup = topic_soup.find_all('article', class_ = 'tm-articles-list__item')
-    for article_soup in all_articles_soup:
-        article_title: str = article_soup.find('a', class_='tm-title__link').find('span').text
-        article_views = article_soup.find('span', class_='tm-icon-counter__value').text
-        article_link: str = str(article_soup.find('a', class_='tm-title__link')['href'])
-        article_text = get_all_text_from_posts(get_soup(get_url_html(main_page + article_link)))
-        posts_data.append(ArticleData(article_title, article_views, article_link, article_text))
-    return posts_data
+            posts_data.append(Habr.__ArticleData(article_title, article_views, article_link, article_text))
+        return posts_data
 
 def main():
-    pprint(get_best_habr_posts())
+    pprint(Habr.get_best_posts())
 
 if __name__ == '__main__':
     main()
